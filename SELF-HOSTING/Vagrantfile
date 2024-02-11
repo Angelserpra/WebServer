@@ -1,0 +1,67 @@
+#-- mode: ruby --
+#vi: set ft=ruby :
+Vagrant.configure("2") do |config|
+  
+  #Virtual machine configuration
+  config.vm.define "WebServerAngel" do |web|
+    web.vm.box = "debian/bullseye64"
+    web.vm.hostname = "WebServerAngel"
+    web.vm.network "public_network", ip: "192.168.1.133"
+    
+    #Port configuration
+    web.vm.network "forwarded_port", guest: 80, host: 8080
+    web.vm.network "forwarded_port", guest: 443, host: 8443
+    
+    web.vm.provider "virtualbox" do |vb|
+      vb.memory = "254" 
+      vb.cpus = 2 
+    end
+    
+    # Provision configuration
+    web.vm.provision "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get install -y apache2
+    sudo apt-get install -y php libapache2-mod-php
+    
+    #Copy certificate and private key
+    sudo mkdir /etc/apache2/ssl
+    sudo cp /vagrant/certificadoAngel.cer /etc/apache2/ssl/
+    sudo cp /vagrant/clavePrivadaAngel.key /etc/apache2/ssl/
+    
+    #SSL certificate configuration
+    sudo cp /vagrant/config/ssl-site.conf /etc/apache2/sites-available/
+    sudo a2ensite ssl-site.conf
+    
+    #Home page configuration
+    cp -v /vagrant/config/WebServerAngel/index.html /var/www/html
+    
+    #Custom error page configuration
+    cp -v /vagrant/config/WebServerAngel/error404.html /var/www/html
+    cp -v /vagrant/config/AngelServer.conf /etc/apache2/sites-available
+    
+    #We disable the default Apache2 configuration file and enable the one for our web site
+    sudo a2dissite 000-default.conf
+    sudo a2ensite AngelServer.conf
+    
+    #Download the photo
+    cp -v /vagrant/logo.png /var/www/html/
+    
+    #Admin page with photo with password
+    cp -v /vagrant/config/WebServerAngel/admin.html /var/www/html
+
+    #We create and establish users and passwords.
+    sudo cp -v /vagrant/config/.htpasswd /etc/apache2/.htpasswd
+
+    sudo htpasswd -c -b /etc/apache2/.htpasswd admin asir
+    sudo htpasswd -b /etc/apache2/.htpasswd sysadmin risa
+    sudo aenmod auth_digest
+    sudo a2enmod ssl
+
+    #Enable mod_status
+    sudo a2enmod status
+
+    #Restart the Apache service
+    sudo systemctl restart apache2
+    SHELL
+  end
+end
